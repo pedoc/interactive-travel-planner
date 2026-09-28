@@ -3,6 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElButton, ElButtonGroup, ElOption, ElPopconfirm, ElSelect } from 'element-plus'
 import { readDragPayload, writeDragPayload } from '../../domain/drag'
 import type { PoiSearchResult } from '../../domain/types'
+import { usePlansStore } from '../../stores/plans'
+import { useWeatherStore } from '../../stores/weather'
+import { planDayDateKey } from '../../weather/types'
+import WeatherBadge from '../weather/WeatherBadge.vue'
 import { mapRuntimeState, planMapProvider } from '../../map/provider'
 import { usePlannerStore } from '../../stores/planner'
 import ExpenseEditorPopover from '../budget/ExpenseEditorPopover.vue'
@@ -15,6 +19,8 @@ const emit = defineEmits<{
 }>()
 
 const store = usePlannerStore()
+const plans = usePlansStore()
+const weather = useWeatherStore()
 const query = ref('')
 const results = ref<PoiSearchResult[]>([])
 const loading = ref(false)
@@ -48,6 +54,24 @@ let timer = 0
 let searchToken = 0
 
 const allCandidates = computed(() => store.candidatePlaces())
+const candidateWeatherDate = computed(() => {
+  const startAt = plans.activePlan?.metadata.startAt
+  return startAt ? planDayDateKey(startAt, store.days, store.selectedDayId) : ''
+})
+let candidateWeatherToken = 0
+watch(() => [candidateWeatherDate.value, weather.selectedProviderId, weather.selectedProviderConfigured, ...allCandidates.value.map((place) => `${place.id}:${place.lng}:${place.lat}`)].join('|'), async () => {
+  const token = ++candidateWeatherToken
+  const date = candidateWeatherDate.value
+  if (!date || weather.selectedProviderId === 'none') return
+  const queue = [...allCandidates.value]
+  const worker = async () => {
+    while (queue.length && token === candidateWeatherToken) {
+      const place = queue.shift()!
+      await weather.ensureWeather(place, date)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker))
+}, { immediate: true })
 
 const candidates = computed(() => {
   const values = store.candidatePlaces(query.value)
@@ -390,7 +414,7 @@ onBeforeUnmount(() => {
           <button type="button" class="place-map-focus-button" :title="`在地图上定位 ${place.name}`" :aria-label="`在地图上定位 ${place.name}`" @pointerdown.stop @click.stop="focusPlaceOnMap(place.id)"><CategoryIcon :category="place.category" /></button>
           <span>{{ place.name }}</span>
         </div>
-        <div class="psub"><span class="pool-place-type">{{ place.type }}</span><span>·</span><PlacePriorityPicker :model-value="place.priority" @change="store.setPlacePriority(place.id, $event)" /><ExpenseEditorPopover owner-type="place" :owner-id="place.id" :title="`${place.name}费用`" :default-category="place.category === 'lodging' ? 'lodging' : place.category === 'food' ? 'meal' : 'ticket'" /></div>
+        <div class="psub"><span class="pool-place-type">{{ place.type }}</span><WeatherBadge v-if="candidateWeatherDate && weather.weatherFor(place.id, candidateWeatherDate)" :weather="weather.weatherFor(place.id, candidateWeatherDate)!" /><span v-else-if="weather.selectedProviderId !== 'none'" class="pool-weather-loading">查天气…</span><span>·</span><PlacePriorityPicker :model-value="place.priority" @change="store.setPlacePriority(place.id, $event)" /><ExpenseEditorPopover owner-type="place" :owner-id="place.id" :title="`${place.name}费用`" :default-category="place.category === 'lodging' ? 'lodging' : place.category === 'food' ? 'meal' : 'ticket'" /></div>
       </div>
     </div>
   </section>
