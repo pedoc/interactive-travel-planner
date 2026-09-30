@@ -28,7 +28,7 @@ function normalizeProfile(profile: Partial<AiProviderProfile>): AiProviderProfil
     baseUrl: profile.baseUrl,
     models,
     model,
-    timeoutSeconds: Number(profile.timeoutSeconds) || 90,
+    timeoutSeconds: Number(profile.timeoutSeconds) || 0,
     contextWindowTokens,
     maxInputTokens,
     maxOutputTokens,

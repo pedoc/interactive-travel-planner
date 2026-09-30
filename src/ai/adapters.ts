@@ -11,13 +11,21 @@ const travelDraftSchema = {
   required: ['title', 'durationDays', 'origin', 'returnToOrigin', 'days', 'generalNotes', 'uncertainties'],
   properties: {
     title: { type: 'string' }, durationDays: { type: ['integer', 'null'], minimum: 1, description: '攻略明确写出的总行程天数，例如“5天4晚”应为 5；即使只有部分逐日明细也必须保留总天数。' }, origin: { type: ['string', 'null'] }, returnToOrigin: { type: ['boolean', 'null'] },
-    days: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['sourceLabel', 'startArea', 'endArea', 'overnightArea', 'places'], properties: {
-      sourceLabel: { type: 'string' }, startArea: { type: ['string', 'null'] }, endArea: { type: ['string', 'null'] }, overnightArea: { type: ['string', 'null'] },
-      places: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'kind', 'category', 'note', 'stayMinutes', 'transportToNext'], properties: {
-        name: { type: 'string' }, kind: { type: 'string', enum: placeKinds }, category: { type: 'string', enum: placeCategories }, note: { type: 'string' },
-        stayMinutes: { type: ['integer', 'null'] }, transportToNext: { type: ['string', 'null'], enum: [...transportModes, null] },
-      } } },
-    } } },
+    days: {
+      type: 'array', items: {
+        type: 'object', additionalProperties: false, required: ['sourceLabel', 'startArea', 'endArea', 'overnightArea', 'places'], properties: {
+          sourceLabel: { type: 'string' }, startArea: { type: ['string', 'null'] }, endArea: { type: ['string', 'null'] }, overnightArea: { type: ['string', 'null'] },
+          places: {
+            type: 'array', items: {
+              type: 'object', additionalProperties: false, required: ['name', 'kind', 'category', 'note', 'stayMinutes', 'transportToNext'], properties: {
+                name: { type: 'string' }, kind: { type: 'string', enum: placeKinds }, category: { type: 'string', enum: placeCategories }, note: { type: 'string' },
+                stayMinutes: { type: ['integer', 'null'] }, transportToNext: { type: ['string', 'null'], enum: [...transportModes, null] },
+              }
+            }
+          },
+        }
+      }
+    },
     generalNotes: { type: 'array', items: { type: 'string' } }, uncertainties: { type: 'array', items: { type: 'string' } },
   },
 }
@@ -67,12 +75,14 @@ function responsesText(data: any): string {
 
 async function createOpenAiClient(profile: AiProviderProfile, apiKey: string): Promise<any> {
   const { default: OpenAI } = await import('openai')
-  return new OpenAI({ apiKey, baseURL: profile.baseUrl.trim().replace(/\/+$/, ''), timeout: profile.timeoutSeconds * 1000, maxRetries: 0, dangerouslyAllowBrowser: true })
+  const timeout = profile.timeoutSeconds && profile.timeoutSeconds > 0 ? profile.timeoutSeconds * 1000 : undefined
+  return new OpenAI({ apiKey, baseURL: profile.baseUrl.trim().replace(/\/+$/, ''), timeout, maxRetries: 0, dangerouslyAllowBrowser: true })
 }
 
 async function createAnthropicClient(profile: AiProviderProfile, apiKey: string): Promise<any> {
   const { default: Anthropic } = await import('@anthropic-ai/sdk')
-  return new Anthropic({ apiKey, baseURL: profile.baseUrl.trim().replace(/\/+$/, ''), timeout: profile.timeoutSeconds * 1000, maxRetries: 0, dangerouslyAllowBrowser: true })
+  const timeout = profile.timeoutSeconds && profile.timeoutSeconds > 0 ? profile.timeoutSeconds * 1000 : undefined
+  return new Anthropic({ apiKey, baseURL: profile.baseUrl.trim().replace(/\/+$/, ''), timeout, maxRetries: 0, dangerouslyAllowBrowser: true })
 }
 
 function normalizeSdkError(error: unknown): Error {
@@ -146,10 +156,12 @@ async function callAnthropic(profile: AiProviderProfile, apiKey: string, request
   const data = await client.messages.create({
     model: profile.model,
     system: request.systemPrompt,
-    messages: [{ role: 'user', content: [
-      { type: 'text', text: request.userText },
-      ...images.map((image) => ({ type: 'image', source: { type: 'base64', media_type: image.mimeType, data: dataUrlBase64(image) } })),
-    ] }],
+    messages: [{
+      role: 'user', content: [
+        { type: 'text', text: request.userText },
+        ...images.map((image) => ({ type: 'image', source: { type: 'base64', media_type: image.mimeType, data: dataUrlBase64(image) } })),
+      ]
+    }],
     max_tokens: profile.maxOutputTokens,
     tools: [{ name: request.toolName, description: request.toolDescription, input_schema: request.schema }],
     tool_choice: { type: 'tool', name: request.toolName },

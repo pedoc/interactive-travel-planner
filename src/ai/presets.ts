@@ -37,7 +37,7 @@ export function profileFromPreset(presetId: string, id = `ai_${crypto.randomUUID
     baseUrl: preset.baseUrl,
     models: [...preset.models],
     model: preset.models[0],
-    timeoutSeconds: 90,
+    timeoutSeconds: 0,
     contextWindowTokens: preset.contextWindowTokens,
     maxInputTokens: preset.maxInputTokens,
     maxOutputTokens: preset.maxOutputTokens,

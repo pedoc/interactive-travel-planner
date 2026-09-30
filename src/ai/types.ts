@@ -11,7 +11,7 @@ export interface AiProviderProfile {
   baseUrl: string
   models: string[]
   model: string
-  timeoutSeconds: number
+  timeoutSeconds?: number
   contextWindowTokens: number
   maxInputTokens: number
   maxOutputTokens: number
